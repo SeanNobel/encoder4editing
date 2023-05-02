@@ -5,8 +5,13 @@ import torch
 from torch import nn
 from torch.nn import Conv2d, BatchNorm2d, PReLU, Sequential, Module
 
-from models.encoders.helpers import get_blocks, bottleneck_IR, bottleneck_IR_SE, _upsample_add
-from models.stylegan2.model import EqualLinear
+from encoder4editing.models.encoders.helpers import (
+    get_blocks,
+    bottleneck_IR,
+    bottleneck_IR_SE,
+    _upsample_add,
+)
+from encoder4editing.models.stylegan2.model import EqualLinear
 
 
 class ProgressiveStage(Enum):
@@ -38,12 +43,14 @@ class GradualStyleBlock(Module):
         self.spatial = spatial
         num_pools = int(np.log2(spatial))
         modules = []
-        modules += [Conv2d(in_c, out_c, kernel_size=3, stride=2, padding=1),
-                    nn.LeakyReLU()]
+        modules += [
+            Conv2d(in_c, out_c, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(),
+        ]
         for i in range(num_pools - 1):
             modules += [
                 Conv2d(out_c, out_c, kernel_size=3, stride=2, padding=1),
-                nn.LeakyReLU()
+                nn.LeakyReLU(),
             ]
         self.convs = nn.Sequential(*modules)
         self.linear = EqualLinear(out_c, out_c, lr_mul=1)
@@ -56,24 +63,26 @@ class GradualStyleBlock(Module):
 
 
 class GradualStyleEncoder(Module):
-    def __init__(self, num_layers, mode='ir', opts=None):
+    def __init__(self, num_layers, mode="ir", opts=None):
         super(GradualStyleEncoder, self).__init__()
-        assert num_layers in [50, 100, 152], 'num_layers should be 50,100, or 152'
-        assert mode in ['ir', 'ir_se'], 'mode should be ir or ir_se'
+        assert num_layers in [50, 100, 152], "num_layers should be 50,100, or 152"
+        assert mode in ["ir", "ir_se"], "mode should be ir or ir_se"
         blocks = get_blocks(num_layers)
-        if mode == 'ir':
+        if mode == "ir":
             unit_module = bottleneck_IR
-        elif mode == 'ir_se':
+        elif mode == "ir_se":
             unit_module = bottleneck_IR_SE
-        self.input_layer = Sequential(Conv2d(3, 64, (3, 3), 1, 1, bias=False),
-                                      BatchNorm2d(64),
-                                      PReLU(64))
+        self.input_layer = Sequential(
+            Conv2d(3, 64, (3, 3), 1, 1, bias=False), BatchNorm2d(64), PReLU(64)
+        )
         modules = []
         for block in blocks:
             for bottleneck in block:
-                modules.append(unit_module(bottleneck.in_channel,
-                                           bottleneck.depth,
-                                           bottleneck.stride))
+                modules.append(
+                    unit_module(
+                        bottleneck.in_channel, bottleneck.depth, bottleneck.stride
+                    )
+                )
         self.body = Sequential(*modules)
 
         self.styles = nn.ModuleList()
@@ -122,24 +131,26 @@ class GradualStyleEncoder(Module):
 
 
 class Encoder4Editing(Module):
-    def __init__(self, num_layers, mode='ir', opts=None):
+    def __init__(self, num_layers, mode="ir", opts=None):
         super(Encoder4Editing, self).__init__()
-        assert num_layers in [50, 100, 152], 'num_layers should be 50,100, or 152'
-        assert mode in ['ir', 'ir_se'], 'mode should be ir or ir_se'
+        assert num_layers in [50, 100, 152], "num_layers should be 50,100, or 152"
+        assert mode in ["ir", "ir_se"], "mode should be ir or ir_se"
         blocks = get_blocks(num_layers)
-        if mode == 'ir':
+        if mode == "ir":
             unit_module = bottleneck_IR
-        elif mode == 'ir_se':
+        elif mode == "ir_se":
             unit_module = bottleneck_IR_SE
-        self.input_layer = Sequential(Conv2d(3, 64, (3, 3), 1, 1, bias=False),
-                                      BatchNorm2d(64),
-                                      PReLU(64))
+        self.input_layer = Sequential(
+            Conv2d(3, 64, (3, 3), 1, 1, bias=False), BatchNorm2d(64), PReLU(64)
+        )
         modules = []
         for block in blocks:
             for bottleneck in block:
-                modules.append(unit_module(bottleneck.in_channel,
-                                           bottleneck.depth,
-                                           bottleneck.stride))
+                modules.append(
+                    unit_module(
+                        bottleneck.in_channel, bottleneck.depth, bottleneck.stride
+                    )
+                )
         self.body = Sequential(*modules)
 
         self.styles = nn.ModuleList()
@@ -163,12 +174,12 @@ class Encoder4Editing(Module):
         self.progressive_stage = ProgressiveStage.Inference
 
     def get_deltas_starting_dimensions(self):
-        ''' Get a list of the initial dimension of every delta from which it is applied '''
+        """Get a list of the initial dimension of every delta from which it is applied"""
         return list(range(self.style_count))  # Each dimension has a delta applied to it
 
     def set_progressive_stage(self, new_stage: ProgressiveStage):
         self.progressive_stage = new_stage
-        print('Changed progressive stage to: ', new_stage)
+        print("Changed progressive stage to: ", new_stage)
 
     def forward(self, x):
         x = self.input_layer(x)
@@ -201,27 +212,29 @@ class Encoder4Editing(Module):
 
 
 class BackboneEncoderUsingLastLayerIntoW(Module):
-    def __init__(self, num_layers, mode='ir', opts=None):
+    def __init__(self, num_layers, mode="ir", opts=None):
         super(BackboneEncoderUsingLastLayerIntoW, self).__init__()
-        print('Using BackboneEncoderUsingLastLayerIntoW')
-        assert num_layers in [50, 100, 152], 'num_layers should be 50,100, or 152'
-        assert mode in ['ir', 'ir_se'], 'mode should be ir or ir_se'
+        print("Using BackboneEncoderUsingLastLayerIntoW")
+        assert num_layers in [50, 100, 152], "num_layers should be 50,100, or 152"
+        assert mode in ["ir", "ir_se"], "mode should be ir or ir_se"
         blocks = get_blocks(num_layers)
-        if mode == 'ir':
+        if mode == "ir":
             unit_module = bottleneck_IR
-        elif mode == 'ir_se':
+        elif mode == "ir_se":
             unit_module = bottleneck_IR_SE
-        self.input_layer = Sequential(Conv2d(3, 64, (3, 3), 1, 1, bias=False),
-                                      BatchNorm2d(64),
-                                      PReLU(64))
+        self.input_layer = Sequential(
+            Conv2d(3, 64, (3, 3), 1, 1, bias=False), BatchNorm2d(64), PReLU(64)
+        )
         self.output_pool = torch.nn.AdaptiveAvgPool2d((1, 1))
         self.linear = EqualLinear(512, 512, lr_mul=1)
         modules = []
         for block in blocks:
             for bottleneck in block:
-                modules.append(unit_module(bottleneck.in_channel,
-                                           bottleneck.depth,
-                                           bottleneck.stride))
+                modules.append(
+                    unit_module(
+                        bottleneck.in_channel, bottleneck.depth, bottleneck.stride
+                    )
+                )
         self.body = Sequential(*modules)
         log_size = int(math.log(opts.stylegan_size, 2))
         self.style_count = 2 * log_size - 2

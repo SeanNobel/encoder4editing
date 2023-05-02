@@ -1,22 +1,21 @@
 import matplotlib
 
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 import torch
 from torch import nn
-from models.encoders import psp_encoders
-from models.stylegan2.model import Generator
-from configs.paths_config import model_paths
+from encoder4editing.models.encoders import psp_encoders
+from encoder4editing.models.stylegan2.model import Generator
+from encoder4editing.configs.paths_config import model_paths
 
 
 def get_keys(d, name):
-    if 'state_dict' in d:
-        d = d['state_dict']
-    d_filt = {k[len(name) + 1:]: v for k, v in d.items() if k[:len(name)] == name}
+    if "state_dict" in d:
+        d = d["state_dict"]
+    d_filt = {k[len(name) + 1 :]: v for k, v in d.items() if k[: len(name)] == name}
     return d_filt
 
 
 class pSp(nn.Module):
-
     def __init__(self, opts):
         super(pSp, self).__init__()
         self.opts = opts
@@ -28,34 +27,49 @@ class pSp(nn.Module):
         self.load_weights()
 
     def set_encoder(self):
-        if self.opts.encoder_type == 'GradualStyleEncoder':
-            encoder = psp_encoders.GradualStyleEncoder(50, 'ir_se', self.opts)
-        elif self.opts.encoder_type == 'Encoder4Editing':
-            encoder = psp_encoders.Encoder4Editing(50, 'ir_se', self.opts)
-        elif self.opts.encoder_type == 'SingleStyleCodeEncoder':
-            encoder = psp_encoders.BackboneEncoderUsingLastLayerIntoW(50, 'ir_se', self.opts)
+        if self.opts.encoder_type == "GradualStyleEncoder":
+            encoder = psp_encoders.GradualStyleEncoder(50, "ir_se", self.opts)
+        elif self.opts.encoder_type == "Encoder4Editing":
+            encoder = psp_encoders.Encoder4Editing(50, "ir_se", self.opts)
+        elif self.opts.encoder_type == "SingleStyleCodeEncoder":
+            encoder = psp_encoders.BackboneEncoderUsingLastLayerIntoW(
+                50, "ir_se", self.opts
+            )
         else:
-            raise Exception('{} is not a valid encoders'.format(self.opts.encoder_type))
+            raise Exception("{} is not a valid encoders".format(self.opts.encoder_type))
         return encoder
 
     def load_weights(self):
         if self.opts.checkpoint_path is not None:
-            print('Loading e4e over the pSp framework from checkpoint: {}'.format(self.opts.checkpoint_path))
-            ckpt = torch.load(self.opts.checkpoint_path, map_location='cpu')
-            self.encoder.load_state_dict(get_keys(ckpt, 'encoder'), strict=True)
-            self.decoder.load_state_dict(get_keys(ckpt, 'decoder'), strict=True)
+            print(
+                "Loading e4e over the pSp framework from checkpoint: {}".format(
+                    self.opts.checkpoint_path
+                )
+            )
+            ckpt = torch.load(self.opts.checkpoint_path, map_location="cpu")
+            self.encoder.load_state_dict(get_keys(ckpt, "encoder"), strict=True)
+            self.decoder.load_state_dict(get_keys(ckpt, "decoder"), strict=True)
             self.__load_latent_avg(ckpt)
         else:
-            print('Loading encoders weights from irse50!')
-            encoder_ckpt = torch.load(model_paths['ir_se50'])
+            print("Loading encoders weights from irse50!")
+            encoder_ckpt = torch.load(model_paths["ir_se50"])
             self.encoder.load_state_dict(encoder_ckpt, strict=False)
-            print('Loading decoder weights from pretrained!')
+            print("Loading decoder weights from pretrained!")
             ckpt = torch.load(self.opts.stylegan_weights)
-            self.decoder.load_state_dict(ckpt['g_ema'], strict=False)
+            self.decoder.load_state_dict(ckpt["g_ema"], strict=False)
             self.__load_latent_avg(ckpt, repeat=self.encoder.style_count)
 
-    def forward(self, x, resize=True, latent_mask=None, input_code=False, randomize_noise=True,
-                inject_latent=None, return_latents=False, alpha=None):
+    def forward(
+        self,
+        x,
+        resize=True,
+        latent_mask=None,
+        input_code=False,
+        randomize_noise=True,
+        inject_latent=None,
+        return_latents=False,
+        alpha=None,
+    ):
         if input_code:
             codes = x
         else:
@@ -71,17 +85,21 @@ class pSp(nn.Module):
             for i in latent_mask:
                 if inject_latent is not None:
                     if alpha is not None:
-                        codes[:, i] = alpha * inject_latent[:, i] + (1 - alpha) * codes[:, i]
+                        codes[:, i] = (
+                            alpha * inject_latent[:, i] + (1 - alpha) * codes[:, i]
+                        )
                     else:
                         codes[:, i] = inject_latent[:, i]
                 else:
                     codes[:, i] = 0
 
         input_is_latent = not input_code
-        images, result_latent = self.decoder([codes],
-                                             input_is_latent=input_is_latent,
-                                             randomize_noise=randomize_noise,
-                                             return_latents=return_latents)
+        images, result_latent = self.decoder(
+            [codes],
+            input_is_latent=input_is_latent,
+            randomize_noise=randomize_noise,
+            return_latents=return_latents,
+        )
 
         if resize:
             images = self.face_pool(images)
@@ -92,8 +110,8 @@ class pSp(nn.Module):
             return images
 
     def __load_latent_avg(self, ckpt, repeat=None):
-        if 'latent_avg' in ckpt:
-            self.latent_avg = ckpt['latent_avg'].to(self.opts.device)
+        if "latent_avg" in ckpt:
+            self.latent_avg = ckpt["latent_avg"].to(self.opts.device)
         elif self.opts.start_from_latent_avg:
             # Compute mean code based on a large number of latents (10,000 here)
             with torch.no_grad():
