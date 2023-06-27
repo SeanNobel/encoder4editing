@@ -6,7 +6,7 @@ import scipy.ndimage
 import dlib
 from typing import Optional
 
-from brain2face.constants import DLIB_PREDICTOR_PATH
+from brain2face.utils.constants import DLIB_PREDICTOR_PATH
 
 
 def get_landmark(img: np.ndarray, predictor) -> Optional[np.ndarray]:
